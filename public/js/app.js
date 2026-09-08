@@ -1542,6 +1542,9 @@ function updateStatsAndFilters() {
   const navCount = document.getElementById('navPartsCount');
   if (navCount) navCount.textContent = totalParts;
 
+  // تحديث إحصائيات الأصول في الداشبورد (بشكل غير متزامن)
+  updateAssetDashboardStats();
+
   // Sidebar Low Stock Badge
   const navLowBadge = document.getElementById('navLowStockCount');
   if (navLowBadge) {
@@ -4122,6 +4125,29 @@ const ASSET_STATUS = {
   lost:     { label: 'مفقود',         color: 'danger' },
   disposed: { label: 'مستغنى عنه',    color: 'secondary' },
 };
+
+/** تحديث إحصائيات الأصول في بطاقات الداشبورد */
+async function updateAssetDashboardStats() {
+  try {
+    const stats = await apiRequest('/assets/stats');
+    const elTotal  = document.getElementById('statTotalAssets');
+    const elActive = document.getElementById('statActiveAssets');
+    if (elTotal)  elTotal.textContent  = stats.total  || 0;
+    if (elActive) elActive.textContent = stats.active || 0;
+    // تحديث شارة القائمة الجانبية
+    const navBadge = document.getElementById('navAssetsCount');
+    if (navBadge) {
+      navBadge.textContent = stats.total || 0;
+      navBadge.style.display = stats.total ? 'inline-block' : 'none';
+    }
+  } catch (e) {
+    // لا نوقف التطبيق إذا فشلت إحصائيات الأصول
+    const elTotal  = document.getElementById('statTotalAssets');
+    const elActive = document.getElementById('statActiveAssets');
+    if (elTotal)  elTotal.textContent  = '—';
+    if (elActive) elActive.textContent = '—';
+  }
+}
 
 /** تحميل قائمة الأصول */
 async function loadAssets() {
