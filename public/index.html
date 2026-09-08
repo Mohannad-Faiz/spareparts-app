@@ -147,7 +147,7 @@
         </button>
         <button class="nav-item" data-tab="assets" id="tabAssetsBtn">
           <i class="fa-solid fa-building"></i>
-          <span>أصول الشركة</span>
+          <span data-i18n="nav_assets">أصول الشركة</span>
           <span class="nav-counter" id="navAssetsCount" style="background:var(--secondary);color:white;display:none;">0</span>
         </button>
         <button class="nav-item" data-tab="audit" id="tabAuditBtn">
@@ -767,8 +767,8 @@
         <div class="section-card glass-panel">
           <div class="section-header">
             <div class="header-title">
-              <h2><i class="fa-solid fa-building"></i> أصول الشركة</h2>
-              <p>إدارة وتتبع أصول الشركة — مركبات، إلكترونيات، أثاث، أدوات</p>
+              <h2><i class="fa-solid fa-building"></i> <span data-i18n="assets_title">أصول الشركة</span></h2>
+              <p data-i18n="assets_subtitle">إدارة وتتبع أصول الشركة — مركبات، إلكترونيات، أثاث، أدوات</p>
             </div>
             <div class="header-filters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
               <select id="assetFilterCategory" class="form-control" style="min-width:140px;" onchange="loadAssets()">
@@ -789,7 +789,7 @@
               </select>
               <input type="text" id="assetSearch" class="form-control" placeholder="بحث..." style="min-width:160px;" oninput="loadAssets()">
               <button class="btn btn-primary" onclick="openAddAssetModal()">
-                <i class="fa-solid fa-plus"></i> إضافة أصل
+                <i class="fa-solid fa-plus"></i> <span data-i18n="btn_add_asset">إضافة أصل</span>
               </button>
             </div>
           </div>
@@ -803,14 +803,14 @@
               <thead>
                 <tr>
                   <th>QR</th>
-                  <th>رقم الأصل</th>
-                  <th>اسم الأصل</th>
-                  <th>الفئة</th>
-                  <th>الموقع / المسؤول</th>
-                  <th>تاريخ الشراء</th>
-                  <th>القيمة</th>
-                  <th>الحالة</th>
-                  <th>الإجراءات</th>
+                  <th data-i18n="asset_col_number">رقم الأصل</th>
+                  <th data-i18n="asset_col_name">اسم الأصل</th>
+                  <th data-i18n="asset_col_category">الفئة</th>
+                  <th data-i18n="asset_col_location">الموقع / المسؤول</th>
+                  <th data-i18n="asset_col_date">تاريخ الشراء</th>
+                  <th data-i18n="asset_col_value">القيمة</th>
+                  <th data-i18n="asset_col_status">الحالة</th>
+                  <th data-i18n="asset_col_actions">الإجراءات</th>
                 </tr>
               </thead>
               <tbody id="assetsTableBody">
@@ -1897,7 +1897,7 @@
   <div id="assetModal" class="modal-overlay hidden">
     <div class="modal-box glass-panel" style="max-width:680px;width:96vw;">
       <div class="modal-header">
-        <h3 id="assetModalTitle"><i class="fa-solid fa-building"></i> إضافة أصل جديد</h3>
+        <h3 id="assetModalTitle"><i class="fa-solid fa-building"></i> <span data-i18n="modal_add_asset_title">إضافة أصل جديد</span></h3>
         <button class="modal-close-btn" onclick="closeAssetModal()"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
