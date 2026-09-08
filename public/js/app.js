@@ -1490,6 +1490,7 @@ function switchTab(tabId) {
     populateBulkQrPartSelect();
   } else if (tabId === 'assets') {
     loadAssets();
+    populateBulkAssetSelect();
   } else if (tabId === 'scanner') {
     populateQuickDemoScans();
     populateDeviceDropdowns();
@@ -4269,4 +4270,180 @@ async function deleteAsset(id, name) {
   }
 }
 window.deleteAsset = deleteAsset;
+
+
+// =========================================================
+// ASSETS QR PRINT — طباعة QR الأصول
+// =========================================================
+
+/** تعبئة قائمة اختيار الأصل لطباعة QR */
+async function populateBulkAssetSelect() {
+  const sel = document.getElementById('bulkAssetSelect');
+  if (!sel) return;
+  try {
+    const assets = await apiRequest('/assets');
+    sel.innerHTML = '<option value="">-- اختر أصلاً --</option>' +
+      assets.map(a => `<option value="${a.id}" data-num="${esc(a.assetNumber)}" data-name="${esc(a.assetName)}">
+        ${esc(a.assetNumber)} — ${esc(a.assetName)}
+      </option>`).join('');
+  } catch (e) {
+    console.error('populateBulkAssetSelect:', e);
+  }
+}
+window.populateBulkAssetSelect = populateBulkAssetSelect;
+
+/** طباعة QR لأصل واحد بعدد محدد */
+async function printBulkAssetQR() {
+  const sel   = document.getElementById('bulkAssetSelect');
+  const assetId = sel?.value;
+  const count   = parseInt(document.getElementById('bulkAssetCount')?.value, 10) || 1;
+  const option  = sel?.selectedOptions[0];
+
+  if (!assetId) { showToast('الرجاء اختيار أصل أولاً', 'warning'); return; }
+  if (count < 1 || count > 200) { showToast('العدد يجب أن يكون بين 1 و 200', 'warning'); return; }
+
+  const assetNum  = option?.dataset.num  || '';
+  const assetName = option?.dataset.name || '';
+
+  showToast('جاري توليد QR...', 'info');
+
+  try {
+    const data = await apiRequest(`/assets/${assetId}/qrcode`);
+    openAssetPrintWindow([{ assetNumber: assetNum, assetName, qrImage: data.qrImage }], count, `QR — ${assetNum}`);
+  } catch (e) {
+    showToast('فشل توليد QR', 'error');
+  }
+}
+window.printBulkAssetQR = printBulkAssetQR;
+
+/** طباعة QR لجميع الأصول (كل أصل بنسخة واحدة) */
+async function printAllAssetsQR() {
+  showToast('جاري تحميل جميع الأصول وتوليد QR...', 'info');
+
+  try {
+    const assets = await apiRequest('/assets?status=active');
+    if (!assets.length) { showToast('لا توجد أصول نشطة', 'warning'); return; }
+
+    // توليد QR لكل أصل (طلبات متوازية لتسريع العملية)
+    const results = await Promise.all(
+      assets.map(async a => {
+        try {
+          const data = await apiRequest(`/assets/${a.id}/qrcode`);
+          return { assetNumber: a.assetNumber, assetName: a.assetName, brand: a.brand, model: a.model, location: a.location, qrImage: data.qrImage };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    const valid = results.filter(Boolean);
+    showToast(`تم توليد ${valid.length} QR — جاري فتح صفحة الطباعة...`, 'success');
+    openAssetPrintWindow(valid, 1, 'طباعة QR — جميع الأصول');
+  } catch (e) {
+    showToast('فشل تحميل الأصول', 'error');
+  }
+}
+window.printAllAssetsQR = printAllAssetsQR;
+
+/** فتح نافذة طباعة الأصول */
+function openAssetPrintWindow(assets, copiesEach, title) {
+  const win = window.open('', '_blank', 'width=1000,height=800');
+  if (!win) { showToast('الرجاء السماح بالنوافذ المنبثقة', 'warning'); return; }
+
+  // بناء الملصقات
+  let cardsHtml = '';
+  for (const asset of assets) {
+    for (let i = 0; i < copiesEach; i++) {
+      cardsHtml += `
+        <div class="label-card">
+          <div class="label-header">
+            <span class="company">Access Lion Warehouses</span>
+            <span class="asset-num">${esc(asset.assetNumber)}</span>
+          </div>
+          <div class="label-body">
+            <div class="label-qr">
+              <img src="${asset.qrImage}" alt="QR">
+            </div>
+            <div class="label-info">
+              <div class="label-name">${esc(asset.assetName)}</div>
+              ${asset.brand ? `<div class="label-detail">🏷️ ${esc(asset.brand)}${asset.model ? ' ' + esc(asset.model) : ''}</div>` : ''}
+              ${asset.location ? `<div class="label-detail">📍 ${esc(asset.location)}</div>` : ''}
+              <div class="label-detail" style="color:#60a5fa;font-size:6pt;margin-top:2px;">امسح للتفاصيل • Scan for details</div>
+            </div>
+          </div>
+        </div>`;
+    }
+  }
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>${esc(title)}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Cairo', Arial, sans-serif; background: #fff; color: #1e293b; padding: 8px; }
+    .print-header {
+      text-align: center; padding: 8px; margin-bottom: 10px;
+      border-bottom: 2px solid #1e3a8a;
+    }
+    .print-header h1 { font-size: 13pt; color: #1e3a8a; font-weight: 900; }
+    .print-header p { font-size: 8pt; color: #64748b; margin-top: 2px; }
+    .labels-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+    }
+    .label-card {
+      border: 1.5px solid #1e3a8a;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .label-header {
+      background: #1e3a8a;
+      padding: 3px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .company { color: #fff; font-size: 6.5pt; font-weight: 700; }
+    .asset-num { color: #bfdbfe; font-size: 7pt; font-family: monospace; font-weight: 900; }
+    .label-body {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px;
+    }
+    .label-qr img { width: 88px; height: 88px; border-radius: 4px; border: 1px solid #e2e8f0; flex-shrink: 0; }
+    .label-info { flex: 1; min-width: 0; }
+    .label-name { font-size: 8.5pt; font-weight: 700; color: #0f172a; line-height: 1.3; margin-bottom: 4px; }
+    .label-detail { font-size: 6.5pt; color: #475569; line-height: 1.5; }
+    @media print {
+      body { padding: 4px; }
+      .print-header { margin-bottom: 8px; }
+      .labels-grid { gap: 5px; }
+    }
+    @page { margin: 0.8cm; size: A4 portrait; }
+  </style>
+</head>
+<body>
+  <div class="print-header">
+    <h1>🦁 Access Lion Warehouses — ملصقات QR الأصول</h1>
+    <p>${esc(title)} &nbsp;·&nbsp; عدد الملصقات: ${assets.length * copiesEach}</p>
+  </div>
+  <div class="labels-grid">${cardsHtml}</div>
+  <script>
+    document.fonts.ready.then(function() {
+      setTimeout(function() { window.print(); }, 700);
+    });
+  <\/script>
+</body>
+</html>`);
+  win.document.close();
+}
+window.openAssetPrintWindow = openAssetPrintWindow;
 
