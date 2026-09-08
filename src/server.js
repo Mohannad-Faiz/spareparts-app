@@ -11,6 +11,7 @@ const authRoutes    = require('./routes/auth.routes');
 const partsRoutes   = require('./routes/parts.routes');
 const ordersRoutes  = require('./routes/orders.routes');
 const devicesRoutes = require('./routes/devices.routes');
+const assetsRoutes  = require('./routes/assets.routes');
 
 // تشغيل النسخ الاحتياطي التلقائي
 require('./utils/backup');
@@ -41,6 +42,135 @@ app.use('/api/auth',    authRoutes);
 app.use('/api/parts',   partsRoutes);
 app.use('/api/orders',  ordersRoutes);
 app.use('/api/devices', devicesRoutes);
+app.use('/api/assets',  assetsRoutes);
+
+// ── Public Asset API (بدون تسجيل دخول) ──────────────────────────────────────
+app.get('/api/public/asset/:id', async (req, res) => {
+  try {
+    const { Asset } = require('./models');
+    const asset = await Asset.findOne({
+      where: { id: req.params.id, isActive: true },
+      attributes: [
+        'id', 'assetNumber', 'assetName', 'category', 'brand', 'model',
+        'serialNumber', 'description', 'location', 'assignedTo',
+        'purchaseDate', 'purchaseValue', 'currency', 'supplier', 'status', 'notes',
+      ],
+    });
+    if (!asset) return res.status(404).json({ error: 'الأصل غير موجود' });
+    res.json(asset);
+  } catch (err) {
+    res.status(500).json({ error: 'خطأ في الخادم' });
+  }
+});
+
+// ── صفحة الأصل العامة ────────────────────────────────────────────────────────
+app.get('/asset/:id', (req, res) => {
+  const categoryNames = {
+    vehicle: '🚗 مركبة',
+    electronics: '💻 أجهزة إلكترونية',
+    furniture: '🪑 أثاث',
+    tools: '🔧 أدوات ومعدات',
+    other: '📦 أخرى',
+  };
+  const statusNames = {
+    active: { label: 'نشط ✅', color: '#34d399' },
+    inactive: { label: 'غير نشط', color: '#94a3b8' },
+    damaged: { label: 'تالف ⚠️', color: '#f87171' },
+    lost: { label: 'مفقود 🔴', color: '#ef4444' },
+    disposed: { label: 'مستغنى عنه', color: '#64748b' },
+  };
+
+  res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تفاصيل الأصل — Access Lion Warehouses</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Cairo', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 20px; }
+    .container { max-width: 480px; margin: 0 auto; }
+    .header { text-align: center; padding: 24px 0 20px; border-bottom: 1px solid #1e293b; margin-bottom: 24px; }
+    .logo-text { font-size: 1.3rem; font-weight: 900; color: #60a5fa; }
+    .logo-sub { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+    .card { background: #1e293b; border-radius: 16px; padding: 20px; margin-bottom: 14px; border: 1px solid #334155; }
+    .asset-number { display: inline-block; background: #7c3aed; color: #ddd6fe; padding: 4px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; font-family: monospace; margin-bottom: 10px; }
+    .asset-name { font-size: 1.5rem; font-weight: 900; color: #f1f5f9; margin-bottom: 6px; }
+    .asset-cat { font-size: 0.9rem; color: #94a3b8; margin-bottom: 10px; }
+    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+    .info-list { list-style: none; }
+    .info-list li { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #0f172a; font-size: 0.88rem; gap: 10px; }
+    .info-list li:last-child { border-bottom: none; }
+    .info-label { color: #64748b; flex-shrink: 0; }
+    .info-value { color: #e2e8f0; font-weight: 600; text-align: left; }
+    .section-title { font-size: 0.85rem; font-weight: 700; color: #60a5fa; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
+    .loading { text-align: center; padding: 60px 0; color: #64748b; }
+    .spinner { width: 40px; height: 40px; border: 3px solid #1e293b; border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .footer { text-align: center; padding: 20px 0; color: #334155; font-size: 0.75rem; }
+    .damage-alert { background: #7f1d1d; border: 1px solid #ef4444; border-radius: 12px; padding: 12px 16px; margin-bottom: 14px; text-align: center; color: #fca5a5; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo-text">🦁 Access Lion Warehouses</div>
+      <div class="logo-sub">نظام إدارة أصول الشركة</div>
+    </div>
+    <div id="content">
+      <div class="loading"><div class="spinner"></div><div>جاري تحميل بيانات الأصل...</div></div>
+    </div>
+    <div class="footer">تم المسح بواسطة QR Code — Access Lion Warehouses © 2026</div>
+  </div>
+  <script>
+    const catNames = ${JSON.stringify(categoryNames)};
+    const statNames = ${JSON.stringify(statusNames)};
+    fetch('/api/public/asset/${req.params.id}')
+      .then(r => r.json())
+      .then(a => {
+        if (a.error) {
+          document.getElementById('content').innerHTML = '<div class="card" style="text-align:center;color:#f87171;">⚠️ الأصل غير موجود</div>';
+          return;
+        }
+        const st = statNames[a.status] || { label: a.status, color: '#94a3b8' };
+        const alertHtml = (a.status === 'damaged' || a.status === 'lost')
+          ? \`<div class="damage-alert">\${st.label} — يرجى التواصل مع المسؤول</div>\` : '';
+
+        const rows = [
+          a.brand      ? ['🏷️ الماركة', a.brand + (a.model ? ' / ' + a.model : '')] : null,
+          a.serialNumber ? ['🔢 الرقم التسلسلي', a.serialNumber] : null,
+          a.location   ? ['📍 الموقع', a.location] : null,
+          a.assignedTo ? ['👤 المسؤول', a.assignedTo] : null,
+          a.supplier   ? ['🏭 المورد', a.supplier] : null,
+          a.purchaseDate ? ['📅 تاريخ الشراء', a.purchaseDate] : null,
+          a.purchaseValue ? ['💰 القيمة', parseFloat(a.purchaseValue).toLocaleString('ar') + ' ' + (a.currency || 'AED')] : null,
+          a.notes      ? ['📝 ملاحظات', a.notes] : null,
+        ].filter(Boolean);
+
+        document.getElementById('content').innerHTML = \`
+          \${alertHtml}
+          <div class="card">
+            <div class="asset-number">\${a.assetNumber}</div>
+            <div class="asset-name">\${a.assetName}</div>
+            <div class="asset-cat">\${catNames[a.category] || a.category}</div>
+            <span class="status-badge" style="background:\${st.color}22;color:\${st.color};border:1px solid \${st.color}44">\${st.label}</span>
+          </div>
+          <div class="card">
+            <div class="section-title">تفاصيل الأصل</div>
+            <ul class="info-list">
+              \${rows.map(([l,v]) => \`<li><span class="info-label">\${l}</span><span class="info-value">\${v}</span></li>\`).join('')}
+            </ul>
+          </div>
+        \`;
+      })
+      .catch(() => {
+        document.getElementById('content').innerHTML = '<div class="card" style="text-align:center;color:#f87171;">⚠️ خطأ في الاتصال</div>';
+      });
+  </script>
+</body>
+</html>`);
+});
 
 // ── Public QR API (بدون تسجيل دخول) ─────────────────────────────────────────
 app.get('/api/public/part/:id', async (req, res) => {

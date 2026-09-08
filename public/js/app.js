@@ -1413,6 +1413,8 @@ function switchTab(tabId) {
   } else if (tabId === 'print-labels') {
     renderPrintableLabels();
     populateBulkQrPartSelect();
+  } else if (tabId === 'assets') {
+    loadAssets();
   } else if (tabId === 'scanner') {
     populateQuickDemoScans();
     populateDeviceDropdowns();
@@ -3923,4 +3925,273 @@ function appendTerminalLog(containerId, message, type = 'info') {
 
   container.scrollTop = container.scrollHeight;
 }
+
+
+// =========================================================
+// ASSETS MANAGEMENT — إدارة أصول الشركة
+// =========================================================
+
+const ASSET_CATEGORIES = {
+  vehicle:     '🚗 مركبة',
+  electronics: '💻 إلكترونيات',
+  furniture:   '🪑 أثاث',
+  tools:       '🔧 أدوات',
+  other:       '📦 أخرى',
+};
+
+const ASSET_STATUS = {
+  active:   { label: 'نشط',           color: 'success' },
+  inactive: { label: 'غير نشط',       color: 'secondary' },
+  damaged:  { label: 'تالف',          color: 'danger' },
+  lost:     { label: 'مفقود',         color: 'danger' },
+  disposed: { label: 'مستغنى عنه',    color: 'secondary' },
+};
+
+/** تحميل قائمة الأصول */
+async function loadAssets() {
+  try {
+    const category = document.getElementById('assetFilterCategory')?.value || '';
+    const status   = document.getElementById('assetFilterStatus')?.value   || '';
+    const search   = document.getElementById('assetSearch')?.value          || '';
+    const params   = new URLSearchParams();
+    if (category) params.set('category', category);
+    if (status)   params.set('status',   status);
+    if (search)   params.set('search',   search);
+
+    const [assets, stats] = await Promise.all([
+      apiRequest(`/assets?${params}`),
+      apiRequest('/assets/stats'),
+    ]);
+
+    renderAssetStats(stats);
+    renderAssetsTable(assets);
+
+    const badge = document.getElementById('navAssetsCount');
+    if (badge) { badge.textContent = stats.total; badge.style.display = stats.total ? 'inline-block' : 'none'; }
+  } catch (err) {
+    showToast(err.message || 'خطأ في تحميل الأصول', 'error');
+  }
+}
+window.loadAssets = loadAssets;
+
+/** رسم إحصائيات الأصول */
+function renderAssetStats(s) {
+  const el = document.getElementById('assetStats');
+  if (!el) return;
+  el.innerHTML = [
+    { label: 'إجمالي الأصول', value: s.total,   icon: 'fa-building',      color: 'var(--primary)' },
+    { label: 'نشطة',          value: s.active,  icon: 'fa-circle-check',   color: 'var(--success)' },
+    { label: 'تالفة',         value: s.damaged, icon: 'fa-triangle-exclamation', color: 'var(--warning)' },
+    { label: 'مفقودة',        value: s.lost,    icon: 'fa-circle-xmark',   color: 'var(--danger)' },
+  ].map(x => `
+    <div style="background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:14px;text-align:center;">
+      <i class="fa-solid ${esc(x.icon)}" style="font-size:1.4rem;color:${esc(x.color)};margin-bottom:6px;display:block;"></i>
+      <div style="font-size:1.6rem;font-weight:900;color:${esc(x.color)};">${x.value}</div>
+      <div style="font-size:0.75rem;color:var(--text-muted);">${esc(x.label)}</div>
+    </div>`).join('');
+}
+
+/** رسم جدول الأصول */
+function renderAssetsTable(assets) {
+  const tbody = document.getElementById('assetsTableBody');
+  if (!tbody) return;
+  if (!assets.length) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">
+      <i class="fa-solid fa-building" style="font-size:2rem;display:block;margin-bottom:8px;"></i>
+      لا توجد أصول — اضغط "إضافة أصل" للبدء
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = assets.map(a => {
+    const st  = ASSET_STATUS[a.status] || { label: a.status, color: 'secondary' };
+    const cat = ASSET_CATEGORIES[a.category] || a.category;
+    const val = a.purchaseValue ? parseFloat(a.purchaseValue).toLocaleString('ar') + ' ' + (a.currency || 'AED') : '-';
+    const dt  = a.purchaseDate ? new Date(a.purchaseDate).toLocaleDateString('ar-SA') : '-';
+    return `<tr>
+      <td>
+        <button class="btn btn-sm" style="background:var(--card-bg);border:1px solid var(--border-color);"
+          onclick="showAssetQR('${a.id}')">
+          <i class="fa-solid fa-qrcode" style="color:var(--primary);"></i>
+        </button>
+      </td>
+      <td><span class="part-number-tag" style="background:rgba(124,58,237,0.15);color:#a78bfa;">${esc(a.assetNumber)}</span></td>
+      <td>
+        <strong>${esc(a.assetName)}</strong>
+        ${a.brand ? `<div style="font-size:0.75rem;color:var(--text-muted);">${esc(a.brand)} ${esc(a.model||'')}</div>` : ''}
+      </td>
+      <td>${esc(cat)}</td>
+      <td>
+        ${a.location ? `<div><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${esc(a.location)}</div>` : ''}
+        ${a.assignedTo ? `<div style="font-size:0.8rem;color:var(--text-muted);"><i class="fa-solid fa-user"></i> ${esc(a.assignedTo)}</div>` : ''}
+      </td>
+      <td><small style="font-family:var(--font-mono);">${dt}</small></td>
+      <td><strong>${esc(val)}</strong></td>
+      <td><span class="badge badge-${esc(st.color)}">${esc(st.label)}</span></td>
+      <td>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-warning btn-sm" onclick="openEditAssetModal('${a.id}')" title="تعديل">
+            <i class="fa-solid fa-pen"></i>
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAsset('${a.id}','${escJsAttr(a.assetName)}')" title="حذف">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/** فتح modal إضافة أصل */
+function openAddAssetModal() {
+  document.getElementById('assetModalTitle').innerHTML = '<i class="fa-solid fa-plus"></i> إضافة أصل جديد';
+  document.getElementById('assetModalId').value    = '';
+  document.getElementById('assetFormName').value   = '';
+  document.getElementById('assetFormNumber').value = '';
+  document.getElementById('assetFormBrand').value  = '';
+  document.getElementById('assetFormModel').value  = '';
+  document.getElementById('assetFormSerial').value = '';
+  document.getElementById('assetFormLocation').value  = '';
+  document.getElementById('assetFormAssigned').value  = '';
+  document.getElementById('assetFormDate').value   = '';
+  document.getElementById('assetFormValue').value  = '';
+  document.getElementById('assetFormSupplier').value = '';
+  document.getElementById('assetFormNotes').value  = '';
+  document.getElementById('assetFormCategory').value = 'electronics';
+  document.getElementById('assetFormStatus').value   = 'active';
+  document.getElementById('assetFormCurrency').value = 'AED';
+  document.getElementById('assetModal').classList.remove('hidden');
+}
+window.openAddAssetModal = openAddAssetModal;
+
+/** فتح modal تعديل أصل */
+async function openEditAssetModal(id) {
+  try {
+    const a = await apiRequest(`/assets/${id}`);
+    document.getElementById('assetModalTitle').innerHTML = '<i class="fa-solid fa-pen"></i> تعديل الأصل';
+    document.getElementById('assetModalId').value    = a.id;
+    document.getElementById('assetFormName').value   = a.assetName || '';
+    document.getElementById('assetFormNumber').value = a.assetNumber || '';
+    document.getElementById('assetFormBrand').value  = a.brand || '';
+    document.getElementById('assetFormModel').value  = a.model || '';
+    document.getElementById('assetFormSerial').value = a.serialNumber || '';
+    document.getElementById('assetFormLocation').value  = a.location || '';
+    document.getElementById('assetFormAssigned').value  = a.assignedTo || '';
+    document.getElementById('assetFormDate').value   = a.purchaseDate || '';
+    document.getElementById('assetFormValue').value  = a.purchaseValue || '';
+    document.getElementById('assetFormSupplier').value = a.supplier || '';
+    document.getElementById('assetFormNotes').value  = a.notes || '';
+    document.getElementById('assetFormCategory').value = a.category || 'other';
+    document.getElementById('assetFormStatus').value   = a.status || 'active';
+    document.getElementById('assetFormCurrency').value = a.currency || 'AED';
+    document.getElementById('assetModal').classList.remove('hidden');
+  } catch (err) {
+    showToast('فشل تحميل بيانات الأصل', 'error');
+  }
+}
+window.openEditAssetModal = openEditAssetModal;
+
+/** إغلاق modal */
+function closeAssetModal() {
+  document.getElementById('assetModal').classList.add('hidden');
+}
+window.closeAssetModal = closeAssetModal;
+
+/** حفظ الأصل (إضافة أو تعديل) */
+async function saveAsset() {
+  const id = document.getElementById('assetModalId').value;
+  const data = {
+    assetName:     document.getElementById('assetFormName').value.trim(),
+    assetNumber:   document.getElementById('assetFormNumber').value.trim() || undefined,
+    category:      document.getElementById('assetFormCategory').value,
+    brand:         document.getElementById('assetFormBrand').value.trim() || null,
+    model:         document.getElementById('assetFormModel').value.trim() || null,
+    serialNumber:  document.getElementById('assetFormSerial').value.trim() || null,
+    location:      document.getElementById('assetFormLocation').value.trim() || null,
+    assignedTo:    document.getElementById('assetFormAssigned').value.trim() || null,
+    purchaseDate:  document.getElementById('assetFormDate').value || null,
+    purchaseValue: document.getElementById('assetFormValue').value || null,
+    currency:      document.getElementById('assetFormCurrency').value,
+    supplier:      document.getElementById('assetFormSupplier').value.trim() || null,
+    status:        document.getElementById('assetFormStatus').value,
+    notes:         document.getElementById('assetFormNotes').value.trim() || null,
+  };
+
+  if (!data.assetName) { showToast('اسم الأصل مطلوب', 'warning'); return; }
+
+  try {
+    if (id) {
+      await apiRequest(`/assets/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+      showToast('تم تحديث الأصل بنجاح', 'success');
+    } else {
+      await apiRequest('/assets', { method: 'POST', body: JSON.stringify(data) });
+      showToast('تم إضافة الأصل بنجاح', 'success');
+    }
+    closeAssetModal();
+    loadAssets();
+  } catch (err) {
+    showToast(err.message || 'فشل الحفظ', 'error');
+  }
+}
+window.saveAsset = saveAsset;
+
+/** عرض QR الأصل */
+async function showAssetQR(id) {
+  try {
+    const data = await apiRequest(`/assets/${id}/qrcode`);
+    const el = document.getElementById('assetQrContent');
+    el.innerHTML = `
+      <div style="margin-bottom:10px;">
+        <span class="part-number-tag" style="background:rgba(124,58,237,0.15);color:#a78bfa;">${esc(data.assetNumber)}</span>
+      </div>
+      <img src="${data.qrImage}" alt="QR" style="width:200px;height:200px;border-radius:10px;border:2px solid var(--border-color);">
+      <p style="margin-top:10px;font-size:0.8rem;color:var(--text-muted);">امسح لعرض تفاصيل الأصل</p>`;
+    document.getElementById('assetQrModal').classList.remove('hidden');
+    // حفظ بيانات للطباعة
+    document.getElementById('assetQrModal').dataset.qrImg    = data.qrImage;
+    document.getElementById('assetQrModal').dataset.assetNum = data.assetNumber;
+  } catch (err) {
+    showToast('فشل توليد QR', 'error');
+  }
+}
+window.showAssetQR = showAssetQR;
+
+/** طباعة QR الأصل */
+function printAssetQR() {
+  const modal  = document.getElementById('assetQrModal');
+  const qrImg  = modal.dataset.qrImg    || '';
+  const assetNum = modal.dataset.assetNum || '';
+  const win = window.open('', '_blank', 'width=400,height=500');
+  if (!win) { showToast('الرجاء السماح بالنوافذ المنبثقة', 'warning'); return; }
+  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head>
+    <meta charset="UTF-8"><title>QR — ${esc(assetNum)}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+      body{font-family:Cairo,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#fff;gap:12px;}
+      .num{background:#ede9fe;color:#7c3aed;padding:4px 16px;border-radius:20px;font-weight:900;font-family:monospace;font-size:1rem;}
+      img{width:200px;height:200px;border:2px solid #1e3a8a;border-radius:8px;}
+      p{font-size:0.8rem;color:#64748b;}
+    </style>
+  </head><body>
+    <div class="num">${esc(assetNum)}</div>
+    <img src="${qrImg}" alt="QR">
+    <p>Access Lion Warehouses — أصول الشركة</p>
+    <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`);
+  win.document.close();
+}
+window.printAssetQR = printAssetQR;
+
+/** حذف أصل */
+async function deleteAsset(id, name) {
+  if (!confirm(`هل أنت متأكد من حذف الأصل: ${name}؟`)) return;
+  try {
+    await apiRequest(`/assets/${id}`, { method: 'DELETE' });
+    showToast('تم حذف الأصل', 'success');
+    loadAssets();
+  } catch (err) {
+    showToast(err.message || 'فشل الحذف', 'error');
+  }
+}
+window.deleteAsset = deleteAsset;
 

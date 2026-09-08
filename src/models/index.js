@@ -6,6 +6,7 @@ const Transaction = require('./Transaction');
 const AuditLog = require('./AuditLog');
 const PurchaseOrder = require('./PurchaseOrder');
 const ScannerDevice = require('./ScannerDevice');
+const Asset = require('./Asset');
 
 // ================================
 // العلاقات (Associations)
@@ -34,4 +35,5 @@ module.exports = {
   AuditLog,
   PurchaseOrder,
   ScannerDevice,
+  Asset,
 };
