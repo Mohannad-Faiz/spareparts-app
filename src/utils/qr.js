@@ -1,15 +1,16 @@
 const QRCode = require('qrcode');
 
-// بند 2: QR يحتوي على Unique Part ID وليس الاسم فقط، لمنع أي تعارض بين القطع.
-// الصيغة المشفّرة داخل QR (JSON) بحيث يتعرف عليها Scanner أي جهاز بسهولة:
-// { t: "PART", id: "<uuid>", pn: "SP-000125" }
+// الـ QR يحتوي على رابط URL مباشر يفتح صفحة تفاصيل القطعة بدون تسجيل دخول
+// عند مسح الـ QR من أي هاتف، يفتح المتصفح مباشرة على صفحة القطعة
 function buildPartQRPayload(part) {
-  return JSON.stringify({ t: 'PART', id: part.id, pn: part.partNumber });
+  const base = process.env.APP_URL || 'https://spareparts-app-production-543f.up.railway.app';
+  return `${base}/part/${part.id}`;
 }
 
 // بند 11: QR فردي لكل قطعة فعلية (Serialized Unit)
 function buildUnitQRPayload(unit, part) {
-  return JSON.stringify({ t: 'UNIT', id: unit.id, sc: unit.serialCode, pid: part.id, pn: part.partNumber });
+  const base = process.env.APP_URL || 'https://spareparts-app-production-543f.up.railway.app';
+  return `${base}/part/${part.id}?unit=${unit.id}`;
 }
 
 // توليد صورة QR كـ Data URL (base64 PNG) - جاهزة للعرض والطباعة مباشرة في الواجهة

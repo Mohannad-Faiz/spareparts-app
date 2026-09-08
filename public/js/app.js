@@ -2672,47 +2672,161 @@ function doBulkQrPrint() {
   const partNum  = document.getElementById('bulkQrInfoPartNum')?.textContent  || '';
   const count    = document.getElementById('bulkQrInfoCount')?.textContent    || '';
 
-  const win = window.open('', '_blank', 'width=900,height=700');
+  // استخراج بيانات القطعة من الـ state
+  const partId = document.getElementById('bulkQrPartSelect')?.value;
+  const part = state.parts.find(p => p.id === partId) || {};
+
+  const win = window.open('', '_blank', 'width=1000,height=800');
   if (!win) { showToast('الرجاء السماح بالنوافذ المنبثقة لهذا الموقع', 'warning'); return; }
 
-  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head>
-    <meta charset="UTF-8">
-    <title>QR — ${partNum} (${count})</title>
-    <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: 'Cairo', 'Segoe UI', Arial, sans-serif; background: #fff; color: #111; }
-      h1 { font-size: 13pt; margin-bottom: 6pt; text-align: center; }
-      .subtitle { font-size: 9pt; color: #555; text-align: center; margin-bottom: 10pt; }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-        gap: 8px;
-        padding: 8px;
-      }
-      .card {
-        border: 1px solid #d0d0d0;
-        border-radius: 8px;
-        padding: 8px 6px;
-        text-align: center;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 4px;
-        break-inside: avoid;
-        page-break-inside: avoid;
-      }
-      .card img { width: 110px; height: 110px; border-radius: 4px; }
-      .pn { font-size: 7.5pt; font-family: monospace; color: #0055aa; font-weight: 700; }
-      .nm { font-size: 7pt; color: #333; font-weight: 600; line-height: 1.2; }
-      .loc { font-size: 6.5pt; color: #777; }
-      @media print { body { margin: 0; } .grid { gap: 6px; padding: 4px; } }
-    </style>
-  </head><body>
-    <h1>طباعة QR — ${partNum}</h1>
-    <p class="subtitle">${partName} &nbsp;|&nbsp; ${count}</p>
-    <div class="grid">${grid.innerHTML.replace(/class="bulk-qr-card"[^>]*>/g, 'class="card">').replace(/style="[^"]*"/g, '')}</div>
-    <script>window.onload = function(){ window.print(); }<\/script>
-  </body></html>`);
+  // استخراج صور الـ QR من الـ grid
+  const qrImgs = grid.querySelectorAll('img');
+  const qrSrc = qrImgs.length > 0 ? qrImgs[0].src : '';
+  const total = parseInt(count) || qrImgs.length;
+
+  // بناء الملصقات
+  let cardsHtml = '';
+  for (let i = 0; i < total; i++) {
+    cardsHtml += `
+      <div class="label-card">
+        <div class="label-header">
+          <span class="company">Access Lion Warehouses</span>
+        </div>
+        <div class="label-body">
+          <div class="label-qr">
+            <img src="${qrSrc}" alt="QR">
+          </div>
+          <div class="label-info">
+            <div class="label-pn">${esc(partNum)}</div>
+            <div class="label-name">${esc(partName)}</div>
+            ${part.category ? `<div class="label-detail">📁 ${esc(part.category)}</div>` : ''}
+            ${part.brand ? `<div class="label-detail">🏷️ ${esc(part.brand)}</div>` : ''}
+            ${part.location ? `<div class="label-detail">📍 ${esc(part.location)}</div>` : ''}
+            ${part.supplier ? `<div class="label-detail">🏭 ${esc(part.supplier)}</div>` : ''}
+          </div>
+        </div>
+        <div class="label-footer">
+          <span>الكمية: ${part.currentQuantity || 0} ${esc(part.unit || 'pcs')}</span>
+          <span>حد الطلب: ${part.minimumStockLevel || 0}</span>
+        </div>
+      </div>`;
+  }
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>طباعة ملصقات QR — ${esc(partNum)}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Cairo', 'Segoe UI', Arial, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      padding: 12px;
+    }
+    .print-header {
+      text-align: center;
+      padding: 10px;
+      margin-bottom: 14px;
+      border-bottom: 2px solid #1e3a8a;
+    }
+    .print-header h1 { font-size: 16pt; color: #1e3a8a; font-weight: 900; }
+    .print-header p { font-size: 9pt; color: #64748b; margin-top: 3px; }
+    .labels-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .label-card {
+      border: 1.5px solid #1e3a8a;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .label-header {
+      background: #1e3a8a;
+      padding: 4px 8px;
+      text-align: center;
+    }
+    .company {
+      color: #fff;
+      font-size: 7pt;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .label-body {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px;
+    }
+    .label-qr img {
+      width: 80px;
+      height: 80px;
+      border-radius: 4px;
+      border: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+    .label-info { flex: 1; min-width: 0; }
+    .label-pn {
+      font-size: 7.5pt;
+      font-family: monospace;
+      color: #1d4ed8;
+      font-weight: 900;
+      background: #eff6ff;
+      padding: 1px 5px;
+      border-radius: 3px;
+      display: inline-block;
+      margin-bottom: 3px;
+    }
+    .label-name {
+      font-size: 8pt;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.2;
+      margin-bottom: 3px;
+    }
+    .label-detail {
+      font-size: 6.5pt;
+      color: #475569;
+      line-height: 1.4;
+    }
+    .label-footer {
+      background: #f1f5f9;
+      border-top: 1px solid #e2e8f0;
+      padding: 3px 8px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 6.5pt;
+      color: #64748b;
+      font-weight: 600;
+    }
+    @media print {
+      body { background: #fff; padding: 6px; }
+      .print-header { margin-bottom: 10px; }
+      .labels-grid { gap: 7px; }
+      .label-card { border-color: #1e3a8a; }
+    }
+    @page { margin: 1cm; size: A4; }
+  </style>
+</head>
+<body>
+  <div class="print-header">
+    <h1>🦁 Access Lion Warehouses — ملصقات QR</h1>
+    <p>${esc(partName)} &nbsp;·&nbsp; رقم القطعة: ${esc(partNum)} &nbsp;·&nbsp; عدد الملصقات: ${total}</p>
+  </div>
+  <div class="labels-grid">${cardsHtml}</div>
+  <script>
+    document.fonts.ready.then(function() {
+      setTimeout(function() { window.print(); }, 500);
+    });
+  <\/script>
+</body>
+</html>`);
   win.document.close();
 }
 window.doBulkQrPrint = doBulkQrPrint;

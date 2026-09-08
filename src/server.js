@@ -42,6 +42,172 @@ app.use('/api/parts',   partsRoutes);
 app.use('/api/orders',  ordersRoutes);
 app.use('/api/devices', devicesRoutes);
 
+// ── Public QR API (بدون تسجيل دخول) ─────────────────────────────────────────
+app.get('/api/public/part/:id', async (req, res) => {
+  try {
+    const { Part, Transaction } = require('./models');
+    const part = await Part.findOne({
+      where: { id: req.params.id, isActive: true },
+      attributes: [
+        'id', 'partNumber', 'partName', 'description', 'category',
+        'brand', 'model', 'location', 'minimumStockLevel',
+        'currentQuantity', 'unit', 'supplier',
+      ],
+    });
+    if (!part) return res.status(404).json({ error: 'القطعة غير موجودة' });
+
+    // إجمالي المضاف والمصروف
+    const { Op } = require('sequelize');
+    const added = await Transaction.sum('quantity', {
+      where: { partId: part.id, type: 'ADD' }
+    }) || 0;
+    const issued = await Transaction.sum('quantity', {
+      where: { partId: part.id, type: 'ISSUE' }
+    }) || 0;
+
+    res.json({
+      ...part.toJSON(),
+      totalAdded: added,
+      totalIssued: issued,
+      needsReorder: part.currentQuantity <= part.minimumStockLevel,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'خطأ في الخادم' });
+  }
+});
+
+// ── صفحة QR العامة ────────────────────────────────────────────────────────────
+app.get('/part/:id', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تفاصيل القطعة — Access Lion Warehouses</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Cairo', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 20px; }
+    .container { max-width: 480px; margin: 0 auto; }
+    .header { text-align: center; padding: 24px 0 20px; border-bottom: 1px solid #1e293b; margin-bottom: 24px; }
+    .logo-text { font-size: 1.3rem; font-weight: 900; color: #60a5fa; letter-spacing: 1px; }
+    .logo-sub { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+    .card { background: #1e293b; border-radius: 16px; padding: 24px; margin-bottom: 16px; border: 1px solid #334155; }
+    .part-number { display: inline-block; background: #1d4ed8; color: #bfdbfe; padding: 4px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; font-family: monospace; margin-bottom: 10px; }
+    .part-name { font-size: 1.5rem; font-weight: 900; color: #f1f5f9; margin-bottom: 6px; }
+    .part-cat { font-size: 0.9rem; color: #94a3b8; }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stat-box { background: #0f172a; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #1e293b; }
+    .stat-num { font-size: 2rem; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+    .stat-label { font-size: 0.78rem; color: #64748b; }
+    .stat-box.available .stat-num { color: #34d399; }
+    .stat-box.issued .stat-num { color: #f87171; }
+    .stat-box.added .stat-num { color: #60a5fa; }
+    .stat-box.reorder .stat-num { color: #fbbf24; }
+    .alert { background: #7f1d1d; border: 1px solid #ef4444; border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+    .alert-icon { font-size: 1.5rem; }
+    .alert-text { font-size: 0.9rem; font-weight: 700; color: #fca5a5; }
+    .info-list { list-style: none; }
+    .info-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #0f172a; font-size: 0.9rem; }
+    .info-list li:last-child { border-bottom: none; }
+    .info-label { color: #64748b; }
+    .info-value { color: #e2e8f0; font-weight: 600; }
+    .progress-bar { background: #0f172a; border-radius: 8px; height: 10px; overflow: hidden; margin-top: 12px; }
+    .progress-fill { height: 100%; border-radius: 8px; transition: width 0.5s; }
+    .progress-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+    .loading { text-align: center; padding: 60px 0; color: #64748b; }
+    .spinner { width: 40px; height: 40px; border: 3px solid #1e293b; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .footer { text-align: center; padding: 20px 0; color: #334155; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo-text">🦁 Access Lion Warehouses</div>
+      <div class="logo-sub">مستودعات أكسس ليون — نظام إدارة قطع الغيار</div>
+    </div>
+
+    <div id="content">
+      <div class="loading">
+        <div class="spinner"></div>
+        <div>جاري تحميل بيانات القطعة...</div>
+      </div>
+    </div>
+
+    <div class="footer">تم المسح بواسطة QR Code — Access Lion Warehouses © 2026</div>
+  </div>
+
+  <script>
+    const partId = '${req.params.id}';
+    fetch('/api/public/part/' + partId)
+      .then(r => r.json())
+      .then(p => {
+        if (p.error) {
+          document.getElementById('content').innerHTML = '<div class="card" style="text-align:center;color:#f87171;">⚠️ القطعة غير موجودة أو غير نشطة</div>';
+          return;
+        }
+
+        const pct = Math.min(100, Math.round((p.currentQuantity / Math.max(p.totalAdded || p.minimumStockLevel * 3, 1)) * 100));
+        const barColor = p.needsReorder ? '#ef4444' : p.currentQuantity <= p.minimumStockLevel * 2 ? '#fbbf24' : '#34d399';
+        const alertHtml = p.needsReorder ? \`
+          <div class="alert">
+            <div class="alert-icon">🚨</div>
+            <div class="alert-text">تنبيه! الكمية وصلت لحد الطلب — يجب إعادة الطلب فوراً<br>
+            <small style="font-weight:400">المتبقي: \${p.currentQuantity} \${p.unit || 'pcs'} | حد الطلب: \${p.minimumStockLevel} \${p.unit || 'pcs'}</small></div>
+          </div>\` : '';
+
+        document.getElementById('content').innerHTML = \`
+          \${alertHtml}
+          <div class="card">
+            <div class="part-number">\${p.partNumber}</div>
+            <div class="part-name">\${p.partName}</div>
+            <div class="part-cat">\${p.category || ''}\${p.brand ? ' · ' + p.brand : ''}\${p.model ? ' · ' + p.model : ''}</div>
+          </div>
+
+          <div class="stats-grid" style="margin-bottom:16px">
+            <div class="stat-box available">
+              <div class="stat-num">\${p.currentQuantity}</div>
+              <div class="stat-label">المتوفر حالياً</div>
+            </div>
+            <div class="stat-box reorder">
+              <div class="stat-num">\${p.minimumStockLevel}</div>
+              <div class="stat-label">حد إعادة الطلب</div>
+            </div>
+            <div class="stat-box added">
+              <div class="stat-num">\${p.totalAdded}</div>
+              <div class="stat-label">إجمالي الوارد</div>
+            </div>
+            <div class="stat-box issued">
+              <div class="stat-num">\${p.totalIssued}</div>
+              <div class="stat-label">إجمالي المصروف</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="progress-bar"><div class="progress-fill" style="width:\${pct}%;background:\${barColor}"></div></div>
+            <div class="progress-label"><span>0</span><span>المخزون: \${pct}%</span><span>\${p.totalAdded || p.currentQuantity}</span></div>
+          </div>
+
+          <div class="card">
+            <ul class="info-list">
+              \${p.location ? \`<li><span class="info-label">📍 الموقع في المخزن</span><span class="info-value">\${p.location}</span></li>\` : ''}
+              \${p.supplier ? \`<li><span class="info-label">🏭 المورد</span><span class="info-value">\${p.supplier}</span></li>\` : ''}
+              \${p.unit ? \`<li><span class="info-label">📦 وحدة القياس</span><span class="info-value">\${p.unit}</span></li>\` : ''}
+              \${p.description ? \`<li><span class="info-label">📝 ملاحظات</span><span class="info-value">\${p.description}</span></li>\` : ''}
+            </ul>
+          </div>
+        \`;
+      })
+      .catch(() => {
+        document.getElementById('content').innerHTML = '<div class="card" style="text-align:center;color:#f87171;">⚠️ خطأ في الاتصال بالخادم</div>';
+      });
+  </script>
+</body>
+</html>`);
+});
+
 app.get('/api/health', async (req, res) => {
   const dialect = process.env.DB_DIALECT || 'sqlite';
   let dbOk = false;
