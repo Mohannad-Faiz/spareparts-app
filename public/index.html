@@ -705,9 +705,12 @@
               <p data-i18n="print_studio_subtitle">إنشاء بطاقات وملصقات جاهزة للطباعة الفورية بمقاسات الطابعات الحرارية
                 و A4</p>
             </div>
-            <div class="header-filters">
+            <div class="header-filters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <button class="btn btn-secondary" onclick="printAllPartsQR()">
+                <i class="fa-solid fa-print"></i> طباعة QR الكل
+              </button>
               <button class="btn btn-primary" id="triggerPrintAllBtn">
-                <i class="fa-solid fa-print"></i> <span data-i18n="btn_print_all">طباعة جميع الملصقات</span>
+                <i class="fa-solid fa-th"></i> <span data-i18n="btn_print_all">عرض جميع الملصقات</span>
               </button>
             </div>
           </div>

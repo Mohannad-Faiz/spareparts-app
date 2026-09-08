@@ -2744,6 +2744,106 @@ window.closeBulkQrModal = closeBulkQrModal;
 window.openBulkQrModal  = openBulkQrModal;
 
 /** طباعة الـ grid المولّد كصفحة مستقلة */
+/** طباعة QR لجميع قطع الغيار (نسخة واحدة لكل قطعة) */
+async function printAllPartsQR() {
+  showToast('جاري تحميل جميع القطع وتوليد QR...', 'info');
+
+  try {
+    const parts = state.parts.filter(p => p.isActive !== false);
+    if (!parts.length) { showToast('لا توجد قطع متاحة', 'warning'); return; }
+
+    // توليد QR لكل قطعة بشكل متوازٍ
+    const results = await Promise.all(
+      parts.map(async p => {
+        try {
+          const data = await apiRequest(`/parts/${p.id}/qrcode`);
+          return {
+            partNumber: p.partNumber,
+            partName:   p.partName,
+            brand:      p.brand,
+            model:      p.model,
+            location:   p.location,
+            unit:       p.unit,
+            currentQuantity: p.currentQuantity,
+            qrImage:    data.qrImage,
+          };
+        } catch { return null; }
+      })
+    );
+
+    const valid = results.filter(Boolean);
+    showToast(`تم توليد ${valid.length} QR — جاري فتح الطباعة...`, 'success');
+
+    // فتح نافذة الطباعة
+    const win = window.open('', '_blank', 'width=1000,height=800');
+    if (!win) { showToast('الرجاء السماح بالنوافذ المنبثقة', 'warning'); return; }
+
+    const cardsHtml = valid.map(p => `
+      <div class="label-card">
+        <div class="label-header">
+          <span class="company">Access Lion Warehouses</span>
+          <span class="pn">${esc(p.partNumber)}</span>
+        </div>
+        <div class="label-body">
+          <div class="label-qr">
+            <img src="${p.qrImage}" alt="QR">
+          </div>
+          <div class="label-info">
+            <div class="label-name">${esc(p.partName)}</div>
+            ${p.brand  ? `<div class="label-detail">🏷️ ${esc(p.brand)}${p.model ? ' — ' + esc(p.model) : ''}</div>` : ''}
+            ${p.location ? `<div class="label-detail">📍 ${esc(p.location)}</div>` : ''}
+            <div class="label-stock">رصيد: ${p.currentQuantity} ${esc(p.unit || 'pcs')}</div>
+          </div>
+        </div>
+      </div>`).join('');
+
+    win.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>طباعة QR — جميع قطع الغيار</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Cairo',Arial,sans-serif; background:#fff; color:#1e293b; padding:8px; }
+    .print-header { text-align:center; padding:8px; margin-bottom:10px; border-bottom:2px solid #1e3a8a; }
+    .print-header h1 { font-size:13pt; color:#1e3a8a; font-weight:900; }
+    .print-header p  { font-size:8pt; color:#64748b; margin-top:2px; }
+    .labels-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+    .label-card { border:1.5px solid #1e3a8a; border-radius:8px; overflow:hidden; background:#fff; break-inside:avoid; page-break-inside:avoid; }
+    .label-header { background:#1e3a8a; padding:3px 8px; display:flex; justify-content:space-between; align-items:center; }
+    .company { color:#fff; font-size:6.5pt; font-weight:700; }
+    .pn { color:#bfdbfe; font-size:7pt; font-family:monospace; font-weight:900; }
+    .label-body { display:flex; align-items:center; gap:7px; padding:7px; }
+    .label-qr img { width:88px; height:88px; border-radius:4px; border:1px solid #e2e8f0; flex-shrink:0; }
+    .label-info { flex:1; min-width:0; }
+    .label-name { font-size:8.5pt; font-weight:700; color:#0f172a; line-height:1.3; margin-bottom:3px; }
+    .label-detail { font-size:6.5pt; color:#475569; line-height:1.5; }
+    .label-stock { font-size:6.5pt; color:#1d4ed8; font-weight:700; margin-top:3px; }
+    @media print { body{padding:4px;} .labels-grid{gap:5px;} }
+    @page { margin:0.8cm; size:A4 portrait; }
+  </style>
+</head>
+<body>
+  <div class="print-header">
+    <h1>🦁 Access Lion Warehouses — ملصقات QR قطع الغيار</h1>
+    <p>جميع قطع الغيار &nbsp;·&nbsp; عدد الملصقات: ${valid.length}</p>
+  </div>
+  <div class="labels-grid">${cardsHtml}</div>
+  <script>
+    document.fonts.ready.then(function() {
+      setTimeout(function() { window.print(); }, 700);
+    });
+  <\/script>
+</body>
+</html>`);
+    win.document.close();
+  } catch (e) {
+    showToast('فشل تحميل القطع', 'error');
+  }
+}
+window.printAllPartsQR = printAllPartsQR;
+
 function doBulkQrPrint() {
   const grid = document.getElementById('bulkQrGrid');
   const partName = document.getElementById('bulkQrInfoPartName')?.textContent || '';
