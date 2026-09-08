@@ -34,12 +34,14 @@ router.get('/', authenticate, async (req, res) => {
   if (status) where.status = status;
   if (search) {
     where[Op.or] = [
-      { assetName:   { [Op.like]: `%${search}%` } },
-      { assetNumber: { [Op.like]: `%${search}%` } },
-      { brand:       { [Op.like]: `%${search}%` } },
-      { model:       { [Op.like]: `%${search}%` } },
-      { assignedTo:  { [Op.like]: `%${search}%` } },
-      { location:    { [Op.like]: `%${search}%` } },
+      { assetName:    { [Op.like]: `%${search}%` } },
+      { assetNumber:  { [Op.like]: `%${search}%` } },
+      { brand:        { [Op.like]: `%${search}%` } },
+      { model:        { [Op.like]: `%${search}%` } },
+      { assignedTo:   { [Op.like]: `%${search}%` } },
+      { location:     { [Op.like]: `%${search}%` } },
+      { plateNumber:  { [Op.like]: `%${search}%` } },
+      { serialNumber: { [Op.like]: `%${search}%` } },
     ];
   }
 
@@ -96,7 +98,7 @@ router.post('/', authenticate, authorize('admin', 'storekeeper'), [
 
   const {
     assetNumber, assetName, category, brand, model,
-    serialNumber, description, location, assignedTo,
+    serialNumber, plateNumber, description, location, assignedTo,
     purchaseDate, purchaseValue, currency, supplier, status, notes,
   } = req.body;
 
@@ -116,6 +118,7 @@ router.post('/', authenticate, authorize('admin', 'storekeeper'), [
       brand: brand || null,
       model: model || null,
       serialNumber: serialNumber || null,
+      plateNumber: plateNumber || null,
       description: description || null,
       location: location || null,
       assignedTo: assignedTo || null,
@@ -159,7 +162,7 @@ router.put('/:id', authenticate, authorize('admin', 'storekeeper'), async (req, 
   if (!asset) return res.status(404).json({ error: 'الأصل غير موجود' });
 
   const allowed = [
-    'assetName', 'category', 'brand', 'model', 'serialNumber',
+    'assetName', 'category', 'brand', 'model', 'serialNumber', 'plateNumber',
     'description', 'location', 'assignedTo', 'purchaseDate',
     'purchaseValue', 'currency', 'supplier', 'status', 'notes',
   ];

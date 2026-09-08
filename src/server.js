@@ -52,7 +52,7 @@ app.get('/api/public/asset/:id', async (req, res) => {
       where: { id: req.params.id, isActive: true },
       attributes: [
         'id', 'assetNumber', 'assetName', 'category', 'brand', 'model',
-        'serialNumber', 'description', 'location', 'assignedTo',
+        'serialNumber', 'plateNumber', 'description', 'location', 'assignedTo',
         'purchaseDate', 'purchaseValue', 'currency', 'supplier', 'status', 'notes',
       ],
     });
@@ -139,6 +139,7 @@ app.get('/asset/:id', (req, res) => {
 
         const rows = [
           a.brand      ? ['🏷️ الماركة', a.brand + (a.model ? ' / ' + a.model : '')] : null,
+          a.plateNumber ? ['🚗 رقم اللوحة', a.plateNumber] : null,
           a.serialNumber ? ['🔢 الرقم التسلسلي', a.serialNumber] : null,
           a.location   ? ['📍 الموقع', a.location] : null,
           a.assignedTo ? ['👤 المسؤول', a.assignedTo] : null,

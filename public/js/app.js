@@ -4208,8 +4208,6 @@ function renderAssetsTable(assets) {
   tbody.innerHTML = assets.map(a => {
     const st  = ASSET_STATUS[a.status] || { label: a.status, color: 'secondary' };
     const cat = ASSET_CATEGORIES[a.category] || a.category;
-    const val = a.purchaseValue ? parseFloat(a.purchaseValue).toLocaleString('ar') + ' ' + (a.currency || 'AED') : '-';
-    const dt  = a.purchaseDate ? new Date(a.purchaseDate).toLocaleDateString('ar-SA') : '-';
     return `<tr>
       <td>
         <button class="btn btn-sm" style="background:var(--card-bg);border:1px solid var(--border-color);"
@@ -4224,11 +4222,16 @@ function renderAssetsTable(assets) {
       </td>
       <td>${esc(cat)}</td>
       <td>
+        ${a.plateNumber
+          ? `<span style="background:rgba(59,130,246,0.15);color:#60a5fa;padding:2px 10px;border-radius:6px;font-family:var(--font-mono);font-weight:700;font-size:0.85rem;">
+              🚗 ${esc(a.plateNumber)}
+             </span>`
+          : '<span style="color:var(--text-muted);">—</span>'}
+      </td>
+      <td>
         ${a.location ? `<div><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${esc(a.location)}</div>` : ''}
         ${a.assignedTo ? `<div style="font-size:0.8rem;color:var(--text-muted);"><i class="fa-solid fa-user"></i> ${esc(a.assignedTo)}</div>` : ''}
       </td>
-      <td><small style="font-family:var(--font-mono);">${dt}</small></td>
-      <td><strong>${esc(val)}</strong></td>
       <td><span class="badge badge-${esc(st.color)}">${esc(st.label)}</span></td>
       <td>
         <div style="display:flex;gap:4px;">
@@ -4253,6 +4256,7 @@ function openAddAssetModal() {
   document.getElementById('assetFormBrand').value  = '';
   document.getElementById('assetFormModel').value  = '';
   document.getElementById('assetFormSerial').value = '';
+  document.getElementById('assetFormPlate').value  = '';
   document.getElementById('assetFormLocation').value  = '';
   document.getElementById('assetFormAssigned').value  = '';
   document.getElementById('assetFormDate').value   = '';
@@ -4277,6 +4281,7 @@ async function openEditAssetModal(id) {
     document.getElementById('assetFormBrand').value  = a.brand || '';
     document.getElementById('assetFormModel').value  = a.model || '';
     document.getElementById('assetFormSerial').value = a.serialNumber || '';
+    document.getElementById('assetFormPlate').value  = a.plateNumber || '';
     document.getElementById('assetFormLocation').value  = a.location || '';
     document.getElementById('assetFormAssigned').value  = a.assignedTo || '';
     document.getElementById('assetFormDate').value   = a.purchaseDate || '';
@@ -4309,6 +4314,7 @@ async function saveAsset() {
     brand:         document.getElementById('assetFormBrand').value.trim() || null,
     model:         document.getElementById('assetFormModel').value.trim() || null,
     serialNumber:  document.getElementById('assetFormSerial').value.trim() || null,
+    plateNumber:   document.getElementById('assetFormPlate').value.trim() || null,
     location:      document.getElementById('assetFormLocation').value.trim() || null,
     assignedTo:    document.getElementById('assetFormAssigned').value.trim() || null,
     purchaseDate:  document.getElementById('assetFormDate').value || null,

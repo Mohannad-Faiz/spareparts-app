@@ -184,7 +184,7 @@
           </button>
           <div class="search-bar-wrapper">
             <i class="fa-solid fa-magnifying-glass search-icon"></i>
-            <input type="text" id="globalSearchInput" placeholder="بحث سريع برقم القطعة، الاسم، الموديل، الموقع...">
+            <input type="text" id="globalSearchInput" data-i18n-placeholder="search_placeholder" placeholder="🔍 بحث برقم القطعة، الاسم، الموديل، الماركة، الموقع...">
             <button id="clearSearchBtn" class="btn-clear-search hidden"><i class="fa-solid fa-xmark"></i></button>
           </div>
         </div>
@@ -811,7 +811,9 @@
                 <option value="lost">🔴 مفقود</option>
                 <option value="disposed">مستغنى عنه</option>
               </select>
-              <input type="text" id="assetSearch" class="form-control" placeholder="بحث..." style="min-width:160px;" oninput="loadAssets()">
+              <input type="text" id="assetSearch" class="form-control" 
+                placeholder="🔍 بحث برقم الأصل، الاسم، رقم اللوحة، الماركة، الموقع..." 
+                style="min-width:280px;" oninput="loadAssets()">
               <button class="btn btn-primary" onclick="openAddAssetModal()">
                 <i class="fa-solid fa-plus"></i> <span data-i18n="btn_add_asset">إضافة أصل</span>
               </button>
@@ -859,9 +861,8 @@
                   <th data-i18n="asset_col_number">رقم الأصل</th>
                   <th data-i18n="asset_col_name">اسم الأصل</th>
                   <th data-i18n="asset_col_category">الفئة</th>
+                  <th>رقم اللوحة / Plate</th>
                   <th data-i18n="asset_col_location">الموقع / المسؤول</th>
-                  <th data-i18n="asset_col_date">تاريخ الشراء</th>
-                  <th data-i18n="asset_col_value">القيمة</th>
                   <th data-i18n="asset_col_status">الحالة</th>
                   <th data-i18n="asset_col_actions">الإجراءات</th>
                 </tr>
@@ -1981,6 +1982,10 @@
           <div class="form-group">
             <label class="form-label">الموديل / النوع</label>
             <input type="text" id="assetFormModel" class="form-control" placeholder="EliteBook 840, Hilux...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">رقم اللوحة / Plate No.</label>
+            <input type="text" id="assetFormPlate" class="form-control" placeholder="مثال: 32447">
           </div>
           <div class="form-group">
             <label class="form-label">الرقم التسلسلي (S/N)</label>

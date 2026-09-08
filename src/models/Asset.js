@@ -46,6 +46,11 @@ const Asset = sequelize.define('Asset', {
     allowNull: true,
     comment: 'الرقم التسلسلي من الشركة المصنعة',
   },
+  plateNumber: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    comment: 'رقم لوحة المركبة — للبحث السريع',
+  },
   description: {
     type: DataTypes.TEXT,
     allowNull: true,
@@ -126,6 +131,7 @@ const Asset = sequelize.define('Asset', {
     { fields: ['category'] },
     { fields: ['status'] },
     { fields: ['assignedTo'] },
+    { fields: ['plateNumber'] },
   ],
 });
 
