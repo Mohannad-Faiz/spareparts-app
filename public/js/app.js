@@ -2722,34 +2722,35 @@ function doBulkQrPrint() {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Cairo', 'Segoe UI', Arial, sans-serif;
-      background: #f8fafc;
+      background: #fff;
       color: #1e293b;
-      padding: 12px;
+      padding: 10px;
     }
     .print-header {
       text-align: center;
-      padding: 10px;
-      margin-bottom: 14px;
+      padding: 8px;
+      margin-bottom: 10px;
       border-bottom: 2px solid #1e3a8a;
     }
-    .print-header h1 { font-size: 16pt; color: #1e3a8a; font-weight: 900; }
-    .print-header p { font-size: 9pt; color: #64748b; margin-top: 3px; }
+    .print-header h1 { font-size: 14pt; color: #1e3a8a; font-weight: 900; }
+    .print-header p { font-size: 8pt; color: #64748b; margin-top: 2px; }
     .labels-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
     }
     .label-card {
       border: 1.5px solid #1e3a8a;
-      border-radius: 10px;
+      border-radius: 8px;
       overflow: hidden;
       background: #fff;
       break-inside: avoid;
       page-break-inside: avoid;
+      height: 100%;
     }
     .label-header {
       background: #1e3a8a;
-      padding: 4px 8px;
+      padding: 3px 8px;
       text-align: center;
     }
     .company {
@@ -2761,57 +2762,61 @@ function doBulkQrPrint() {
     .label-body {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       padding: 8px;
     }
     .label-qr img {
-      width: 80px;
-      height: 80px;
+      width: 90px;
+      height: 90px;
       border-radius: 4px;
       border: 1px solid #e2e8f0;
       flex-shrink: 0;
     }
     .label-info { flex: 1; min-width: 0; }
     .label-pn {
-      font-size: 7.5pt;
+      font-size: 8pt;
       font-family: monospace;
       color: #1d4ed8;
       font-weight: 900;
       background: #eff6ff;
-      padding: 1px 5px;
+      padding: 2px 6px;
       border-radius: 3px;
       display: inline-block;
-      margin-bottom: 3px;
+      margin-bottom: 4px;
     }
     .label-name {
-      font-size: 8pt;
+      font-size: 9pt;
       font-weight: 700;
       color: #0f172a;
-      line-height: 1.2;
-      margin-bottom: 3px;
+      line-height: 1.3;
+      margin-bottom: 4px;
     }
     .label-detail {
-      font-size: 6.5pt;
+      font-size: 7pt;
       color: #475569;
-      line-height: 1.4;
+      line-height: 1.5;
     }
     .label-footer {
       background: #f1f5f9;
       border-top: 1px solid #e2e8f0;
-      padding: 3px 8px;
+      padding: 4px 8px;
       display: flex;
       justify-content: space-between;
-      font-size: 6.5pt;
-      color: #64748b;
+      font-size: 7pt;
+      color: #475569;
       font-weight: 600;
     }
     @media print {
-      body { background: #fff; padding: 6px; }
-      .print-header { margin-bottom: 10px; }
-      .labels-grid { gap: 7px; }
-      .label-card { border-color: #1e3a8a; }
+      body { background: #fff; padding: 5px; }
+      .print-header { margin-bottom: 8px; }
+      .labels-grid { gap: 6px; }
+      /* 12 ستيكر في الصفحة = 3 أعمدة × 4 صفوف */
+      .label-card { break-inside: avoid; page-break-inside: avoid; }
     }
-    @page { margin: 1cm; size: A4; }
+    @page {
+      margin: 0.8cm;
+      size: A4 portrait;
+    }
   </style>
 </head>
 <body>
@@ -2822,7 +2827,7 @@ function doBulkQrPrint() {
   <div class="labels-grid">${cardsHtml}</div>
   <script>
     document.fonts.ready.then(function() {
-      setTimeout(function() { window.print(); }, 500);
+      setTimeout(function() { window.print(); }, 600);
     });
   <\/script>
 </body>
