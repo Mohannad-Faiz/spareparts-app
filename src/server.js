@@ -34,6 +34,10 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
+// ── Trust Proxy (مطلوب على Railway/أي reverse proxy) ──────────────────────
+// بدونه، express-rate-limit يرمي ValidationError على كل طلب login
+app.set('trust proxy', 1);
+
 // ── Static files ─────────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, '../public')));
 

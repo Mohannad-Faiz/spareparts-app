@@ -221,25 +221,23 @@ router.post('/:id/add-stock', authenticate, authorize('admin', 'storekeeper'), [
 
   let part, transaction;
   try {
-    const result = await withWriteLock(async () => {
-      // Atomic UPDATE: يقرأ الرصيد ويضيف الكمية في استعلام واحد (ذري) بدلاً من
-      // read-then-write، مما يجعل العملية مستحيلة التصادم حتى مع إزالة الـ transaction.
-      // هذا أكثر موثوقية من transaction + row lock مع مكتبة sqlite3.
-      const [, updated] = await sequelize.query(
-        `UPDATE parts SET currentQuantity = currentQuantity + :qty, updatedAt = :now
-         WHERE id = :id AND isActive = 1
-         RETURNING *`,
-        { replacements: { qty, id: req.params.id, now: new Date().toISOString() }, type: 'UPDATE' }
-      );
-
-      const fresh = await Part.findByPk(req.params.id);
+    // نستخدم Sequelize transaction() + row lock (t.LOCK.UPDATE) بدل UPDATE خام بـ SQL:
+    // هذا يعمل بشكل صحيح ومضمون عبر postgres/mysql/sqlite الثلاثة (بنفس الطريقة
+    // المستخدمة فعلاً في orders.routes.js و devices.routes.js في هذا المشروع)، بعكس
+    // الكود القديم الذي كان يقارن isActive = 1 (رقم صحيح) مباشرة في SQL خام —
+    // وهي مقارنة تفشل بخطأ SQL كامل على PostgreSQL (عمود من نوع boolean حقيقي)،
+    // أي أن إضافة المخزون كانت ستتعطل بالكامل بمجرد تشغيل النظام على PostgreSQL.
+    const result = await withWriteLock(() => sequelize.transaction(async (t) => {
+      const fresh = await Part.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
       if (!fresh || !fresh.isActive) {
         const err = new Error('القطعة غير موجودة');
         err.statusCode = 404;
         throw err;
       }
 
-      const newBalance = fresh.currentQuantity;
+      const newBalance = fresh.currentQuantity + qty;
+      fresh.currentQuantity = newBalance;
+      await fresh.save({ transaction: t });
 
       const tx = await Transaction.create({
         partId: fresh.id,
@@ -251,7 +249,7 @@ router.post('/:id/add-stock', authenticate, authorize('admin', 'storekeeper'), [
         poNumber: req.body.poNumber || null,
         invoiceNumber: req.body.invoiceNumber || null,
         notes: req.body.notes || null,
-      });
+      }, { transaction: t });
 
       await logAction({
         userId: req.user.id,
@@ -260,10 +258,11 @@ router.post('/:id/add-stock', authenticate, authorize('admin', 'storekeeper'), [
         entityType: 'Part',
         entityId: fresh.id,
         details: { partNumber: fresh.partNumber, added: qty, newBalance },
+        transaction: t,
       });
 
       return { part: fresh, transaction: tx };
-    });
+    }));
     part = result.part;
     transaction = result.transaction;
   } catch (err) {
@@ -291,37 +290,26 @@ router.post('/:id/issue-stock', authenticate, authorize('admin', 'storekeeper'),
 
   let part, transaction;
   try {
-    const result = await withWriteLock(async () => {
-      // التحقق المبدئي (سريع، ضمن القفل)
-      const current = await Part.findByPk(req.params.id, { attributes: ['id', 'currentQuantity', 'isActive', 'unit'] });
-      if (!current || !current.isActive) {
+    // نفس الملاحظة الموجودة في add-stock أعلاه: نستخدم transaction() + row lock
+    // حقيقي (t.LOCK.UPDATE) بدل UPDATE خام بشرط isActive = 1 (كان يفشل تماماً على
+    // PostgreSQL) مع "تحقق مزدوج" غير فعّال أصلاً (كان يفحص fresh.currentQuantity < 0
+    // وهي حالة تستحيل أصلاً بسبب شرط الـ WHERE في نفس الاستعلام، فلم يكن يكتشف
+    // التعارض المتزامن الحقيقي إطلاقاً). القفل هنا (t.LOCK.UPDATE) يمنع أي طلب آخر
+    // من قراءة/تعديل نفس الصف حتى تنتهي هذه المعاملة بالكامل — فيستحيل صرف رصيد
+    // سالب أو تسجيل حركة صرف لا تُطابق الرصيد الفعلي حتى مع طلبين متزامنين تماماً.
+    const result = await withWriteLock(() => sequelize.transaction(async (t) => {
+      const fresh = await Part.findByPk(req.params.id, { transaction: t, lock: t.LOCK.UPDATE });
+      if (!fresh || !fresh.isActive) {
         const err = new Error('القطعة غير موجودة'); err.statusCode = 404; throw err;
       }
-      if (current.currentQuantity < qty) {
-        const err = new Error(`الرصيد المتوفر غير كافٍ! المتوفر حالياً: ${current.currentQuantity} ${current.unit || 'pcs'}`);
+      if (fresh.currentQuantity < qty) {
+        const err = new Error(`الرصيد المتوفر غير كافٍ! المتوفر حالياً: ${fresh.currentQuantity} ${fresh.unit || 'pcs'}`);
         err.statusCode = 400; throw err;
       }
 
-      // Atomic UPDATE مشروط: يمنع السالب حتى لو تسابق طلبان في نفس اللحظة
-      await sequelize.query(
-        `UPDATE parts SET currentQuantity = currentQuantity - :qty, updatedAt = :now
-         WHERE id = :id AND isActive = 1 AND currentQuantity >= :qty`,
-        { replacements: { qty, id: req.params.id, now: new Date().toISOString() }, type: 'UPDATE' }
-      );
-
-      const fresh = await Part.findByPk(req.params.id);
-      const newBalance = fresh.currentQuantity;
-
-      // تحقق مزدوج — لو طلب تاني قلّص الكمية بين فحصنا وتنفيذ UPDATE
-      if (fresh.currentQuantity < 0) {
-        // rollback يدوي (ارجع الكمية)
-        await sequelize.query(
-          `UPDATE parts SET currentQuantity = currentQuantity + :qty WHERE id = :id`,
-          { replacements: { qty, id: req.params.id }, type: 'UPDATE' }
-        );
-        const err = new Error('الرصيد غير كافٍ (تعارض متزامن)، أعد المحاولة');
-        err.statusCode = 400; throw err;
-      }
+      const newBalance = fresh.currentQuantity - qty;
+      fresh.currentQuantity = newBalance;
+      await fresh.save({ transaction: t });
 
       const tx = await Transaction.create({
         partId: fresh.id,
@@ -337,7 +325,7 @@ router.post('/:id/issue-stock', authenticate, authorize('admin', 'storekeeper'),
         workOrder: req.body.workOrder || null,
         reasonForIssue: req.body.reasonForIssue || null,
         notes: req.body.notes || null,
-      });
+      }, { transaction: t });
 
       await logAction({
         userId: req.user.id,
@@ -346,10 +334,11 @@ router.post('/:id/issue-stock', authenticate, authorize('admin', 'storekeeper'),
         entityType: 'Part',
         entityId: fresh.id,
         details: { partNumber: fresh.partNumber, issued: qty, newBalance },
+        transaction: t,
       });
 
       return { part: fresh, transaction: tx };
-    });
+    }));
     part = result.part;
     transaction = result.transaction;
   } catch (err) {

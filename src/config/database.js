@@ -42,7 +42,7 @@ if (dialect === 'postgres') {
       // Connection Pool — إدارة اتصالات متعددة متزامنة بكفاءة
       pool: {
         max:     parseInt(process.env.DB_POOL_MAX     || '20',    10), // أقصى اتصال متزامن
-        min:     parseInt(process.env.DB_POOL_MIN     || '2',     10), // اتصالات دائمة (warm)
+        min:     parseInt(process.env.DB_POOL_MIN     || '0',     10), // 0 للسحابة لتجنب idle connections
         acquire: parseInt(process.env.DB_POOL_ACQUIRE || '30000', 10), // انتظار اتصال (ms)
         idle:    parseInt(process.env.DB_POOL_IDLE    || '10000', 10), // إغلاق خامل (ms)
       },

@@ -17,6 +17,7 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'محاولات دخول كثيرة جداً، الرجاء المحاولة مرة أخرى بعد 15 دقيقة' },
   skipSuccessfulRequests: true,
+  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown',
 });
 
 // ================================
@@ -111,7 +112,17 @@ router.patch('/users/:id', authenticate, authorize('admin'), async (req, res) =>
   if (fullName) user.fullName = fullName;
   if (email !== undefined) user.email = email;
   if (permissions !== undefined) {
-    user.permissions = Array.isArray(permissions) ? permissions : (typeof permissions === 'string' ? JSON.parse(permissions) : permissions);
+    if (Array.isArray(permissions)) {
+      user.permissions = permissions;
+    } else if (typeof permissions === 'string') {
+      try {
+        user.permissions = JSON.parse(permissions);
+      } catch (e) {
+        return res.status(400).json({ error: 'صيغة الصلاحيات (permissions) غير صالحة' });
+      }
+    } else {
+      user.permissions = permissions;
+    }
   }
   if (password && password.trim().length >= 6) {
     user.passwordHash = await bcrypt.hash(password.trim(), 10);

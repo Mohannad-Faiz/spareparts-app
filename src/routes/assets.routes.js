@@ -4,7 +4,9 @@ const { body, validationResult } = require('express-validator');
 const { Asset, sequelize } = require('../models');
 const { authenticate, authorize } = require('../middleware/auth');
 const { logAction } = require('../utils/audit');
+const { withWriteLock } = require('../utils/dbLock');
 const QRCode = require('qrcode');
+const { getAppBaseUrl } = require('../utils/qr');
 
 // ── توليد رقم أصل تلقائي مثل: AST-000001 ─────────────────────────────────
 async function generateAssetNumber() {
@@ -13,9 +15,10 @@ async function generateAssetNumber() {
 }
 
 // ── توليد QR URL للأصل ────────────────────────────────────────────────────
+// (نستخدم نفس دالة getAppBaseUrl() المستخدمة لقطع الغيار بدل تكرار نفس الرابط
+// الخارجي الثابت هنا مرة أخرى — راجع src/utils/qr.js لتفاصيل المشكلة السابقة)
 function buildAssetQRUrl(asset) {
-  const base = process.env.APP_URL || 'https://spareparts-app-production-543f.up.railway.app';
-  return `${base}/asset/${asset.id}`;
+  return `${getAppBaseUrl()}/asset/${asset.id}`;
 }
 
 async function generateQRImage(url) {
@@ -104,32 +107,50 @@ router.post('/', authenticate, authorize('admin', 'storekeeper'), [
 
   let asset;
   try {
-    const finalNumber = assetNumber || await generateAssetNumber();
-
     if (assetNumber) {
       const existing = await Asset.findOne({ where: { assetNumber } });
       if (existing) return res.status(409).json({ error: 'رقم الأصل موجود مسبقاً' });
     }
 
-    asset = await Asset.create({
-      assetNumber: finalNumber,
-      assetName,
-      category,
-      brand: brand || null,
-      model: model || null,
-      serialNumber: serialNumber || null,
-      plateNumber: plateNumber || null,
-      description: description || null,
-      location: location || null,
-      assignedTo: assignedTo || null,
-      purchaseDate: purchaseDate || null,
-      purchaseValue: purchaseValue || null,
-      currency: currency || 'AED',
-      supplier: supplier || null,
-      status: status || 'active',
-      notes: notes || null,
-      createdById: req.user.id,
-      createdByName: req.user.fullName || req.user.username,
+    // نفس منطق إعادة المحاولة عند تعارض الرقم التلقائي المستخدم في parts.routes.js
+    // و orders.routes.js — بدونه، إنشاء أصلين في نفس اللحظة تقريباً (بدون رقم يدوي)
+    // كان يحسب نفس الرقم التالي لكليهما، فيفشل الطلب الثاني بـ 409 بدل أن يحصل
+    // تلقائياً على الرقم التالي كما يحدث فعلياً مع القطع وأوامر الشراء.
+    asset = await withWriteLock(async () => {
+      const MAX_ATTEMPTS = 5;
+      let created;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const finalNumber = assetNumber || await generateAssetNumber();
+        try {
+          created = await Asset.create({
+            assetNumber: finalNumber,
+            assetName,
+            category,
+            brand: brand || null,
+            model: model || null,
+            serialNumber: serialNumber || null,
+            plateNumber: plateNumber || null,
+            description: description || null,
+            location: location || null,
+            assignedTo: assignedTo || null,
+            purchaseDate: purchaseDate || null,
+            purchaseValue: purchaseValue || null,
+            currency: currency || 'AED',
+            supplier: supplier || null,
+            status: status || 'active',
+            notes: notes || null,
+            createdById: req.user.id,
+            createdByName: req.user.fullName || req.user.username,
+          });
+          break;
+        } catch (err) {
+          const isUniqueConflict = err.name === 'SequelizeUniqueConstraintError';
+          if (assetNumber || !isUniqueConflict || attempt === MAX_ATTEMPTS) {
+            throw err;
+          }
+        }
+      }
+      return created;
     });
 
     // توليد QR بعد الإنشاء
