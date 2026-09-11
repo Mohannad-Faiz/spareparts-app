@@ -2755,33 +2755,30 @@ async function printAllPartsQR() {
     const parts = state.parts.filter(p => p.isActive !== false);
     if (!parts.length) { showToast('لا توجد قطع متاحة', 'warning'); return; }
 
-    // توليد QR لكل قطعة بشكل متوازٍ
-    const results = await Promise.all(
-      parts.map(async p => {
-        try {
-          const data = await apiRequest(`/parts/${p.id}/qrcode`);
-          return {
-            partNumber: p.partNumber,
-            partName:   p.partName,
-            brand:      p.brand,
-            model:      p.model,
-            location:   p.location,
-            unit:       p.unit,
-            currentQuantity: p.currentQuantity,
-            qrImage:    data.qrImage,
-          };
-        } catch { return null; }
-      })
-    );
-
-    const valid = results.filter(Boolean);
-    showToast(`تم توليد ${valid.length} QR — جاري فتح الطباعة...`, 'success');
+    // توليد QR بشكل تسلسلي (بدل متوازٍ) لتجنب timeout
+    const results = [];
+    for (const p of parts) {
+      try {
+        const data = await apiRequest(`/parts/${p.id}/qrcode`);
+        results.push({
+          partNumber: p.partNumber,
+          partName:   p.partName,
+          brand:      p.brand,
+          model:      p.model,
+          location:   p.location,
+          unit:       p.unit,
+          currentQuantity: p.currentQuantity,
+          qrImage:    data.qrImage,
+        });
+      } catch { /* skip */ }
+    }
+    showToast(`تم توليد ${results.length} QR — جاري فتح الطباعة...`, 'success');
 
     // فتح نافذة الطباعة
     const win = window.open('', '_blank', 'width=1000,height=800');
     if (!win) { showToast('الرجاء السماح بالنوافذ المنبثقة', 'warning'); return; }
 
-    const cardsHtml = valid.map(p => `
+    const cardsHtml = results.map(p => `
       <div class="label-card">
         <div class="label-header">
           <span class="company">Access Lion Warehouses</span>
@@ -4456,21 +4453,39 @@ async function printAllAssetsQR() {
     const assets = await apiRequest('/assets?status=active');
     if (!assets.length) { showToast('لا توجد أصول نشطة', 'warning'); return; }
 
-    // توليد QR لكل أصل (طلبات متوازية لتسريع العملية)
-    const results = await Promise.all(
-      assets.map(async a => {
-        try {
-          const data = await apiRequest(`/assets/${a.id}/qrcode`);
-          return { assetNumber: a.assetNumber, assetName: a.assetName, brand: a.brand, model: a.model, location: a.location, qrImage: data.qrImage };
-        } catch {
-          return null;
-        }
-      })
-    );
+    // توليد QR لكل أصل بشكل تسلسلي (بدل متوازٍ) لتجنب timeout
+    // نستخدم qrCodeData المخزّن مسبقاً أو نولّد الرابط مباشرة
+    const QRCode = window.QRCode;
+    const results = [];
 
-    const valid = results.filter(Boolean);
-    showToast(`تم توليد ${valid.length} QR — جاري فتح صفحة الطباعة...`, 'success');
-    openAssetPrintWindow(valid, 1, 'طباعة QR — جميع الأصول');
+    for (const a of assets) {
+      try {
+        const url = a.qrCodeData || (window.location.origin + '/asset/' + a.id);
+        // توليد QR image من الرابط مباشرة في المتصفح
+        const qrImage = await new Promise((resolve, reject) => {
+          const canvas = document.createElement('canvas');
+          // استخدام fetch لطلب QR من الـ API
+          apiRequest('/assets/' + a.id + '/qrcode')
+            .then(d => resolve(d.qrImage))
+            .catch(() => resolve(null));
+        });
+        if (qrImage) {
+          results.push({
+            assetNumber: a.assetNumber,
+            assetName: a.assetName,
+            brand: a.brand,
+            model: a.model,
+            location: a.location,
+            plateNumber: a.plateNumber,
+            qrImage,
+          });
+        }
+      } catch { /* skip */ }
+    }
+
+    if (!results.length) { showToast('فشل توليد QR — تحقق من الاتصال', 'error'); return; }
+    showToast(`تم توليد ${results.length} QR — جاري فتح صفحة الطباعة...`, 'success');
+    openAssetPrintWindow(results, 1, 'طباعة QR — جميع الأصول');
   } catch (e) {
     showToast('فشل تحميل الأصول', 'error');
   }
