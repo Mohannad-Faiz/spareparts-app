@@ -407,6 +407,18 @@ async function start() {
 
     console.log(`✅ تم الاتصال بقاعدة البيانات (${process.env.DB_DIALECT || 'sqlite'})`);
 
+    // ── Migration: إضافة أعمدة جديدة إن لم تكن موجودة (آمن للتشغيل مرات متعددة) ──
+    const dialect = (process.env.DB_DIALECT || 'sqlite').toLowerCase();
+    const isPostgres = !!process.env.DATABASE_URL || dialect === 'postgres';
+    if (isPostgres) {
+      try {
+        await sequelize.query(`ALTER TABLE IF EXISTS assets ADD COLUMN IF NOT EXISTS "plateNumber" VARCHAR(50);`);
+        console.log('✅ Migration: plateNumber column ready');
+      } catch (e) {
+        // العمود موجود أو الجدول لم يُنشأ بعد — لا مشكلة
+      }
+    }
+
     // مزامنة الجداول (إنشاء إن لم تكن موجودة)
     await sequelize.sync();
     console.log('✅ تمت مزامنة الجداول');
