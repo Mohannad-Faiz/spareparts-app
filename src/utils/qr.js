@@ -7,6 +7,10 @@ function buildPartQRPayload(part) {
   return `${base}/part/${part.id}`;
 }
 
+function getAppBaseUrl() {
+    return process.env.APP_URL || 'https://spareparts-app-production-543f.up.railway.app';
+}
+
 // بند 11: QR فردي لكل قطعة فعلية (Serialized Unit)
 function buildUnitQRPayload(unit, part) {
   const base = process.env.APP_URL || 'https://spareparts-app-production-543f.up.railway.app';
@@ -29,4 +33,4 @@ async function generatePartNumber(Part) {
   return `SP-${next}`;
 }
 
-module.exports = { buildPartQRPayload, buildUnitQRPayload, generateQRImage, generatePartNumber };
+module.exports = { getAppBaseUrl, buildPartQRPayload, buildUnitQRPayload, generateQRImage, generatePartNumber };
